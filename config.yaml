@@ -1,7 +1,9 @@
 # 服务器
 username: "yjiang" #服务器用户名
 password: "Jy582033" #服务器密码
+privateKey: "/Users/yjiang/.ssh/id_rsa" #私钥，绝对路径
 serverAddr: "home.yjiang.cn" #服务器地址
 serverPort: "222" #服务器端口
 localPort: "1081" #端口
 chromePath: "/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome" #本地chrome路径
+useChrome: true
