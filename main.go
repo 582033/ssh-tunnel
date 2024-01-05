@@ -43,9 +43,7 @@ type Config struct {
 // 读取配置文件
 func (c *Config) getConfig() (*Config, error) {
 	var configFile string
-	var authType string
 	flag.StringVar(&configFile, "config", "config.yaml", "配置文件路径,默认为config.yaml")
-	flag.StringVar(&authType, "t", "private_key", "认证类型:password 或 private_key, 默认private_key")
 	flag.Parse()
 
 	//如果配置文件后缀不是yaml结尾的，就报错
@@ -53,17 +51,6 @@ func (c *Config) getConfig() (*Config, error) {
 		return nil, fmt.Errorf("配置文件后缀必须为.yaml")
 	}
 
-	switch authType {
-	case "password":
-		c.AuthType = AuthTypePassword
-		break
-	case "private_key":
-		c.AuthType = AuthTypePrivateKey
-		break
-	default:
-		return nil, fmt.Errorf("认证类型必须为private_key 或 password")
-
-	}
 	yamlFile, err := os.ReadFile(configFile)
 	if err != nil {
 		return nil, err
@@ -72,15 +59,61 @@ func (c *Config) getConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if c.Password == "" && c.PrivateKey == "" {
+		return nil, fmt.Errorf("配置文件的密码和私钥不能都为空")
+	}
+	if c.PrivateKey != "" {
+		c.AuthType = AuthTypePrivateKey
+	}
+
+	if c.Password != "" {
+		c.AuthType = AuthTypePassword
+	}
+
 	return c, nil
 }
 
+type MyResolver struct{}
+
+func (d MyResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
+	//如果没有设置自定义DNS，则使用系统DNS
+	if GlobalConfig.CustomDNS == "" {
+		addr, _ := net.ResolveIPAddr("ip", name)
+		color.Info.Println("访问的域名:" + name + ", 本地解析为:" + addr.IP.String())
+		return socks5.DNSResolver{}.Resolve(ctx, name)
+	}
+
+	//设置自定义DNS
+	dnsServer := GlobalConfig.CustomDNS
+	resolver := net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, "udp", dnsServer)
+		},
+	}
+
+	ips, err := resolver.LookupIPAddr(ctx, name)
+	if err != nil {
+		return ctx, nil, err
+	}
+	color.Info.Println("访问的域名:" + name + ", 解析为:" + ips[0].String())
+
+	if err != nil {
+		return ctx, nil, err
+	}
+	return ctx, ips[0].IP, err
+}
+
 func socks5ProxyStart(sshClient *ssh.Client) {
+	resolve := MyResolver{}
+
 	config := &socks5.Config{
 		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return sshClient.Dial(network, addr)
 		},
-		Resolver: socks5.DNSResolver{},
+		Resolver: resolve,
 	}
 
 	server, err := socks5.New(config)
@@ -125,7 +158,7 @@ func connectToSSH() (*ssh.Client, error) {
 
 		break
 	default:
-		return nil, fmt.Errorf("认证类型必须为private_key 或 password")
+		return nil, fmt.Errorf("缺少private_key 或 password")
 	}
 
 	client, err := ssh.Dial("tcp", GlobalConfig.ServerAddr+":"+GlobalConfig.ServerPort, config)
@@ -166,6 +199,8 @@ func main() {
 	// 启动本地chrome
 	if GlobalConfig.UseChrome {
 		go startChrome()
+	} else {
+		color.Info.Println("当前启动方式为: 仅启动socks5代理")
 	}
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
