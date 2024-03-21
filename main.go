@@ -23,8 +23,10 @@ var GlobalConfig Config
 
 type AuthType string
 
-const AuthTypePassword AuthType = "password"
-const AuthTypePrivateKey AuthType = "private_key"
+const (
+	AuthTypePassword   AuthType = "password"
+	AuthTypePrivateKey AuthType = "private_key"
+)
 
 // Config 声明 配置结构体
 type Config struct {
@@ -46,7 +48,7 @@ func (c *Config) getConfig() (*Config, error) {
 	flag.StringVar(&configFile, "config", "config.yaml", "配置文件路径,默认为config.yaml")
 	flag.Parse()
 
-	//如果配置文件后缀不是yaml结尾的，就报错
+	// 如果配置文件后缀不是yaml结尾的，就报错
 	if configFile[len(configFile)-5:] != ".yaml" {
 		return nil, fmt.Errorf("配置文件后缀必须为.yaml")
 	}
@@ -77,14 +79,14 @@ func (c *Config) getConfig() (*Config, error) {
 type MyResolver struct{}
 
 func (d MyResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
-	//如果没有设置自定义DNS，则使用系统DNS
+	// 如果没有设置自定义DNS，则使用系统DNS
 	if GlobalConfig.CustomDNS == "" {
 		addr, _ := net.ResolveIPAddr("ip", name)
 		color.Info.Println("访问的域名:" + name + ", 本地解析为:" + addr.IP.String())
 		return socks5.DNSResolver{}.Resolve(ctx, name)
 	}
 
-	//设置自定义DNS
+	// 设置自定义DNS
 	dnsServer := GlobalConfig.CustomDNS
 	resolver := net.Resolver{
 		PreferGo: true,
@@ -202,8 +204,36 @@ func main() {
 	} else {
 		color.Info.Println("当前启动方式为: 仅启动socks5代理")
 	}
+
+	// 监测ssh连接状态
+	//todo 需要通知socks重连
+	go func() {
+		quit := make(chan struct{})
+		defer close(quit)
+		for {
+			select {
+			case <-quit:
+				return
+			default:
+				if sshClient.Conn.Wait() != nil {
+					color.Error.Println("SSH连接断开，正在尝试重新连接...")
+					sshClient.Close()
+
+					// 添加适当的延迟
+					time.Sleep(3 * time.Second)
+
+					newSSHClient, err := connectToSSH()
+					if err != nil {
+						color.Error.Println("重新连接失败:", err)
+					} else {
+						sshClient = newSSHClient
+						color.Success.Println("重新连接成功")
+					}
+				}
+			}
+		}
+	}()
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
-	return
 }
