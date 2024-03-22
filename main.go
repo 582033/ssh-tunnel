@@ -161,7 +161,6 @@ func main() {
 	}
 
 	// 监测ssh连接状态
-	// todo 需要通知socks重连
 	go func() {
 		quit := make(chan struct{})
 		defer close(quit)
