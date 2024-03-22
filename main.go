@@ -1,21 +1,19 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
 
-	socks5 "github.com/armon/go-socks5"
 	"github.com/gookit/color"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
+	"ssh-tunnel/libs/chrome"
+	"ssh-tunnel/libs/socks5"
 )
 
 // GlobalConfig 定义一个 config结构体变量
@@ -45,7 +43,7 @@ type Config struct {
 // 读取配置文件
 func (c *Config) getConfig() (*Config, error) {
 	var configFile string
-	flag.StringVar(&configFile, "config", "config.yaml", "配置文件路径,默认为config.yaml")
+	flag.StringVar(&configFile, "config", "./config/config.yaml", "配置文件路径,默认为./config/config.yaml")
 	flag.Parse()
 
 	// 如果配置文件后缀不是yaml结尾的，就报错
@@ -74,59 +72,6 @@ func (c *Config) getConfig() (*Config, error) {
 	}
 
 	return c, nil
-}
-
-type MyResolver struct{}
-
-func (d MyResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
-	// 如果没有设置自定义DNS，则使用系统DNS
-	if GlobalConfig.CustomDNS == "" {
-		addr, _ := net.ResolveIPAddr("ip", name)
-		color.Info.Println("访问的域名:" + name + ", 本地解析为:" + addr.IP.String())
-		return socks5.DNSResolver{}.Resolve(ctx, name)
-	}
-
-	// 设置自定义DNS
-	dnsServer := GlobalConfig.CustomDNS
-	resolver := net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{}
-			return d.DialContext(ctx, "udp", dnsServer)
-		},
-	}
-
-	ips, err := resolver.LookupIPAddr(ctx, name)
-	if err != nil {
-		return ctx, nil, err
-	}
-	color.Info.Println("访问的域名:" + name + ", 解析为:" + ips[0].String())
-
-	if err != nil {
-		return ctx, nil, err
-	}
-	return ctx, ips[0].IP, err
-}
-
-func socks5ProxyStart(sshClient *ssh.Client) {
-	resolve := MyResolver{}
-
-	config := &socks5.Config{
-		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return sshClient.Dial(network, addr)
-		},
-		Resolver: resolve,
-	}
-
-	server, err := socks5.New(config)
-	if err != nil {
-		color.Error.Println("创建socks5代理失败")
-		panic(0)
-	}
-	if err := server.ListenAndServe("tcp", "0.0.0.0:"+GlobalConfig.LocalPort); err != nil {
-		color.Error.Println("启动socks5代理失败")
-		panic(0)
-	}
 }
 
 func connectToSSH() (*ssh.Client, error) {
@@ -175,10 +120,17 @@ func connectToSSH() (*ssh.Client, error) {
 
 // 启动本地chrome
 func startChrome() {
-	cmd := exec.Command(GlobalConfig.ChromePath, "--incognito", "--dns-prefetch-disable", "--single-process", "--proxy-server=socks5://localhost:"+GlobalConfig.LocalPort, "--user-data-dir=/tmp/chrome")
-	if err := cmd.Start(); err == nil {
-		color.Info.Println("启动本地chromec成功")
+	startUp := &chrome.StartupParams{
+		ChromePath: GlobalConfig.ChromePath,
+		RunParams: []string{
+			"--incognito",
+			"--dns-prefetch-disable",
+			"--single-process",
+			"--proxy-server=socks5://localhost:" + GlobalConfig.LocalPort,
+			"--user-data-dir=/tmp/chrome",
+		},
 	}
+	startUp.Start()
 }
 
 // 初始化读取配置
@@ -197,7 +149,12 @@ func main() {
 	}
 
 	// 开始监听本地端口
-	go socks5ProxyStart(sshClient)
+	socks5QuitChan := make(chan struct{})
+	sock5Server := &socks5.Socks5Server{
+		ProxyPort: GlobalConfig.LocalPort,
+		CustomDNS: GlobalConfig.CustomDNS,
+	}
+	go sock5Server.ProxyStart(sshClient, socks5QuitChan)
 	// 启动本地chrome
 	if GlobalConfig.UseChrome {
 		go startChrome()
@@ -206,7 +163,7 @@ func main() {
 	}
 
 	// 监测ssh连接状态
-	//todo 需要通知socks重连
+	// todo 需要通知socks重连
 	go func() {
 		quit := make(chan struct{})
 		defer close(quit)
@@ -217,10 +174,11 @@ func main() {
 			default:
 				if sshClient.Conn.Wait() != nil {
 					color.Error.Println("SSH连接断开，正在尝试重新连接...")
+					close(socks5QuitChan)
 					sshClient.Close()
 
 					// 添加适当的延迟
-					time.Sleep(3 * time.Second)
+					time.Sleep(5 * time.Second)
 
 					newSSHClient, err := connectToSSH()
 					if err != nil {
@@ -228,6 +186,8 @@ func main() {
 					} else {
 						sshClient = newSSHClient
 						color.Success.Println("重新连接成功")
+						socks5QuitChan = make(chan struct{})
+						go sock5Server.ProxyStart(sshClient, socks5QuitChan)
 					}
 				}
 			}
