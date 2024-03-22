@@ -113,8 +113,7 @@ func connectToSSH() (*ssh.Client, error) {
 		return nil, err
 	}
 	// 连接远程服务器成功
-	color.Success.Println("连接远程服务器成功")
-	color.Success.Println("本地端口：" + GlobalConfig.LocalPort)
+	color.Success.Println("连接远程服务器成功, 本地端口：" + GlobalConfig.LocalPort)
 	return client, nil
 }
 
@@ -149,12 +148,11 @@ func main() {
 	}
 
 	// 开始监听本地端口
-	socks5QuitChan := make(chan struct{})
 	sock5Server := &socks5.Socks5Server{
 		ProxyPort: GlobalConfig.LocalPort,
 		CustomDNS: GlobalConfig.CustomDNS,
 	}
-	go sock5Server.ProxyStart(sshClient, socks5QuitChan)
+	go sock5Server.ProxyStart(sshClient)
 	// 启动本地chrome
 	if GlobalConfig.UseChrome {
 		go startChrome()
@@ -174,8 +172,8 @@ func main() {
 			default:
 				if sshClient.Conn.Wait() != nil {
 					color.Error.Println("SSH连接断开，正在尝试重新连接...")
-					close(socks5QuitChan)
 					sshClient.Close()
+					sock5Server.Close()
 
 					// 添加适当的延迟
 					time.Sleep(5 * time.Second)
@@ -186,8 +184,7 @@ func main() {
 					} else {
 						sshClient = newSSHClient
 						color.Success.Println("重新连接成功")
-						socks5QuitChan = make(chan struct{})
-						go sock5Server.ProxyStart(sshClient, socks5QuitChan)
+						go sock5Server.ProxyStart(sshClient)
 					}
 				}
 			}

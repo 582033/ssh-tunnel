@@ -13,13 +13,19 @@ import (
 var Socks5QuitChan = make(chan struct{})
 
 type Socks5Server struct {
-	goSocks5.Server
+	*goSocks5.Server
 	ProxyPort string
 	CustomDNS string
 }
 
-func (s *Socks5Server) New(config *goSocks5.Config) (*goSocks5.Server, error) {
-	return goSocks5.New(config)
+func (s *Socks5Server) New(config *goSocks5.Config) (*Socks5Server, error) {
+	Socks5QuitChan = make(chan struct{})
+	server, err := goSocks5.New(config)
+	if err != nil {
+		return nil, err
+	}
+	s.Server = server
+	return s, nil
 }
 
 func (s *Socks5Server) ListenAndServe(network, addr string) error {
@@ -38,6 +44,8 @@ func (s *Socks5Server) Serve(l net.Listener) error {
 		}
 		select {
 		case <-Socks5QuitChan:
+			// 断开连接并释放端口
+			l.Close()
 			conn.Close()
 			return nil
 		default:
@@ -47,38 +55,35 @@ func (s *Socks5Server) Serve(l net.Listener) error {
 }
 
 func (s *Socks5Server) ServeConn(conn net.Conn) error {
-	return s.ServeConn(conn)
+	return s.Server.ServeConn(conn)
 }
 
-func (s *Socks5Server) ProxyStart(sshClient *ssh.Client, quit chan struct{}) {
-	for {
-		select {
-		case <-quit:
-			color.Error.Println("收到退出信号，关闭socks5代理")
-			return
-		default:
-			resolve := MyResolver{
-				CustomDNS: s.CustomDNS,
-			}
-
-			config := &goSocks5.Config{
-				Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					return sshClient.Dial(network, addr)
-				},
-				Resolver: resolve,
-			}
-
-			server, err := s.New(config)
-			if err != nil {
-				color.Error.Printf("创建socks5代理失败:%s", err.Error())
-				// panic(0)
-				return
-			}
-			if err := server.ListenAndServe("tcp", "0.0.0.0:"+s.ProxyPort); err != nil {
-				color.Error.Printf("启动socks5代理失败:%s", err.Error())
-				// panic(0)
-				return
-			}
-		}
+func (s *Socks5Server) ProxyStart(sshClient *ssh.Client) {
+	resolve := MyResolver{
+		CustomDNS: s.CustomDNS,
 	}
+
+	config := &goSocks5.Config{
+		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return sshClient.Dial(network, addr)
+		},
+		Resolver: resolve,
+	}
+
+	server, err := s.New(config)
+	if err != nil {
+		color.Error.Printf("创建socks5代理失败:%s", err.Error())
+		// panic(0)
+		return
+	}
+	if err := server.ListenAndServe("tcp", "0.0.0.0:"+s.ProxyPort); err != nil {
+		color.Error.Printf("启动socks5代理失败:%s", err.Error())
+		// panic(0)
+		return
+	}
+}
+
+// 关闭连接
+func (s *Socks5Server) Close() {
+	close(Socks5QuitChan)
 }
