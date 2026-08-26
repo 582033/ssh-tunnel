@@ -6,6 +6,18 @@
 
 active: "公司"
 
+# defaults 是所有连接共用的默认值，只放跟“连的是哪台服务器”无关、
+# 大概率所有连接都一样的字段：chromePath（本机 Chrome 装哪了）、
+# customDNS（习惯统一用的 DNS）。
+#
+# 某条连接自己填了同名字段就用自己的，留空才回退到这里；
+# 这里也留空的话，走各字段自身的默认值（如 customDNS 留空=服务器解析）。
+# 不适合放这里的字段：serverAddr/username/password/privateKey/serverPort/
+# localPort/autoConnect ——它们恰恰是用来区分各条连接的，写这里没有意义。
+defaults:
+  chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  customDNS: ""
+
 connections:
   - name: "公司"                      # 下拉里显示的名字，同一文件内唯一
     username: "user"                  # 服务器用户名
@@ -14,9 +26,9 @@ connections:
     serverAddr: "example.com"         # 服务器地址
     serverPort: "22"                  # 服务器端口，留空默认 22
     localPort: "1081"                 # 本地 socks5 端口，留空默认 1081
-    customDNS: ""                     # 留空=由 SSH 服务器解析（推荐）；填了则用它解析且查询走隧道，不写端口默认补 53
+    # customDNS 这里不写，跟着 defaults 走（服务器解析）
     useChrome: true                   # 是否同时启动本地 Chrome
-    chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    # chromePath 这里不写，跟着 defaults 走
     autoConnect: true                 # 打开 App 后自动连接这条
 
   # 多条连接建议用不同的 localPort，切换时浏览器里不必改代理地址
@@ -27,4 +39,14 @@ connections:
     serverPort: "22"
     localPort: "1082"
     useChrome: false
+    autoConnect: false
+
+  # 这条自己填了 chromePath，会覆盖 defaults 里的值——两者不冲突
+  - name: "海外"
+    username: "user"
+    password: "..."
+    serverAddr: "sg.example.com"
+    localPort: "1083"
+    chromePath: "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
+    useChrome: true
     autoConnect: false

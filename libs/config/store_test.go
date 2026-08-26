@@ -16,6 +16,144 @@ func writeTemp(t *testing.T, content string) string {
 	return path
 }
 
+// defaults 里的字段应回填进没自己填的连接
+func TestDefaultsAppliedWhenFieldEmpty(t *testing.T) {
+	s, err := Load(writeTemp(t, `
+active: 公司
+defaults:
+  chromePath: "/opt/chrome"
+  customDNS: "1.1.1.1:53"
+connections:
+  - name: 公司
+    username: u1
+    password: p1
+    serverAddr: office.example
+  - name: 家里
+    username: u2
+    password: p2
+    serverAddr: home.example
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range s.Connections {
+		if c.ChromePath != "/opt/chrome" {
+			t.Fatalf("%s 未继承 defaults.chromePath: %q", c.Name, c.ChromePath)
+		}
+		if c.CustomDNS != "1.1.1.1:53" {
+			t.Fatalf("%s 未继承 defaults.customDNS: %q", c.Name, c.CustomDNS)
+		}
+	}
+}
+
+// 连接自己填了字段时，defaults 不能覆盖它
+func TestConnectionOverridesDefaults(t *testing.T) {
+	s, err := Load(writeTemp(t, `
+active: 公司
+defaults:
+  chromePath: "/opt/chrome"
+  customDNS: "1.1.1.1:53"
+connections:
+  - name: 公司
+    username: u1
+    password: p1
+    serverAddr: office.example
+    chromePath: "/custom/chrome"
+    customDNS: "8.8.8.8:53"
+  - name: 家里
+    username: u2
+    password: p2
+    serverAddr: home.example
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gongsi := s.Connections[0]
+	if gongsi.ChromePath != "/custom/chrome" || gongsi.CustomDNS != "8.8.8.8:53" {
+		t.Fatalf("显式字段被 defaults 覆盖了: %+v", gongsi)
+	}
+	jiali := s.Connections[1]
+	if jiali.ChromePath != "/opt/chrome" || jiali.CustomDNS != "1.1.1.1:53" {
+		t.Fatalf("未填字段应继承 defaults: %+v", jiali)
+	}
+}
+
+// 没有 defaults 字段的旧配置要能照常读取，不受影响
+func TestNoDefaultsFieldStillWorks(t *testing.T) {
+	s, err := Load(writeTemp(t, `
+connections:
+  - name: 公司
+    username: u1
+    password: p1
+    serverAddr: office.example
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Defaults != nil {
+		t.Fatalf("未写 defaults 时应为 nil，实际 %+v", s.Defaults)
+	}
+	if s.Current().ChromePath != "" {
+		t.Fatalf("不应凭空生成 chromePath: %q", s.Current().ChromePath)
+	}
+}
+
+// defaults 落盘时不应把合并结果写死进每条连接，否则改一次 defaults
+// 就不再对已有连接生效了；保存后重新读取应仍然继承 defaults。
+func TestDefaultsNotFlattenedOnSave(t *testing.T) {
+	s, err := Load(writeTemp(t, `
+active: 公司
+defaults:
+  chromePath: "/opt/chrome"
+connections:
+  - name: 公司
+    username: u1
+    password: p1
+    serverAddr: office.example
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(s.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "chromePath: /opt/chrome\n    name:") ||
+		strings.Count(string(raw), "/opt/chrome") != 1 {
+		t.Fatalf("chromePath 被写死进了 connections，defaults 失去意义:\n%s", raw)
+	}
+
+	// 内存里的 Store 保存后应仍可用（不必重新读文件就能拿到合并值）
+	if s.Current().ChromePath != "/opt/chrome" {
+		t.Fatalf("保存后内存中的合并值丢失: %q", s.Current().ChromePath)
+	}
+
+	again, err := Load(s.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Current().ChromePath != "/opt/chrome" {
+		t.Fatalf("重新读取后应仍继承 defaults，实际 %q", again.Current().ChromePath)
+	}
+
+	// 换一个 defaults 值，旧连接应跟着变——证明确实没被拍死成字面值
+	raw2 := strings.Replace(string(raw), "/opt/chrome", "/opt/chrome2", 1)
+	if err := os.WriteFile(s.Path, []byte(raw2), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Load(s.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.Current().ChromePath != "/opt/chrome2" {
+		t.Fatalf("改动 defaults 应联动旧连接，实际 %q", changed.Current().ChromePath)
+	}
+}
+
 func TestLoadMultiConnections(t *testing.T) {
 	s, err := Load(writeTemp(t, `
 active: 家里

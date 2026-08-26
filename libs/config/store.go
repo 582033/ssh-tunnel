@@ -17,6 +17,8 @@ const defaultProfileName = "默认连接"
 // 文件格式：
 //
 //	active: 公司
+//	defaults:
+//	  chromePath: ...
 //	connections:
 //	  - name: 公司
 //	    serverAddr: ...
@@ -27,10 +29,53 @@ const defaultProfileName = "默认连接"
 // 下次保存时自动升级为新格式。
 type Store struct {
 	Active      string    `yaml:"active"`
+	Defaults    *Defaults `yaml:"defaults,omitempty"`
 	Connections []*Config `yaml:"connections"`
 
 	// Path 记录配置实际来源，供「保存」写回同一文件
 	Path string `yaml:"-"`
+}
+
+// Defaults 是所有连接共用的顶层默认值，只收公共性质、跟服务器身份无关的字段
+// （chromePath、customDNS）。像 serverAddr/username/password 这类恰恰是区分
+// 各条连接的关键差异，不适合提到这里。
+//
+// 某条连接自己填了对应字段就用自己的，留空才回退到这里；
+// Defaults 本身留空则最终还是走 Config.Validate 里的兜底默认值。
+type Defaults struct {
+	ChromePath string `yaml:"chromePath,omitempty"`
+	CustomDNS  string `yaml:"customDNS,omitempty"`
+}
+
+// applyTo 把 d 中已填的字段回填进 connections 里对应为空的字段。
+func (d *Defaults) applyTo(connections []*Config) {
+	if d == nil {
+		return
+	}
+	for _, c := range connections {
+		if c.ChromePath == "" {
+			c.ChromePath = d.ChromePath
+		}
+		if c.CustomDNS == "" {
+			c.CustomDNS = d.CustomDNS
+		}
+	}
+}
+
+// stripFrom 是 applyTo 的逆操作：把等于 d 对应值的字段清空，
+// 使其在下次读取时重新走 defaults 合并，而不是被写死在每条连接里。
+func (d *Defaults) stripFrom(connections []*Config) {
+	if d == nil {
+		return
+	}
+	for _, c := range connections {
+		if d.ChromePath != "" && c.ChromePath == d.ChromePath {
+			c.ChromePath = ""
+		}
+		if d.CustomDNS != "" && c.CustomDNS == d.CustomDNS {
+			c.CustomDNS = ""
+		}
+	}
 }
 
 // DefaultPaths 返回按优先级排列的配置搜索路径。
@@ -144,6 +189,9 @@ func read(path string) (*Store, error) {
 	}
 
 	s.normalize()
+	// 合并顶层默认值：只在加载时回填，不写回 Store 字段本身，
+	// 否则下次 Save 会把合并结果实体化到每条连接，defaults 就失去意义了。
+	s.Defaults.applyTo(s.Connections)
 	s.Path, _ = filepath.Abs(path)
 	return s, nil
 }
@@ -293,11 +341,22 @@ func (s *Store) Save() error {
 	}
 	s.normalize()
 
+	// 落盘前把等于 Defaults 值的字段抽掉，否则每条连接会把合并结果
+	// 实体化写死，defaults 就沦为摆设，且改一次 defaults 不再对旧连接生效。
+	s.Defaults.stripFrom(s.Connections)
+
 	data, err := yaml.Marshal(s)
 	if err != nil {
 		return err
 	}
 	header := []byte("# ssh-tunnel 配置（由 App 生成，可手动编辑）\n" +
 		"# active 指向当前选中的连接，connections 下可以放多份。\n")
-	return os.WriteFile(s.Path, append(header, data...), 0o600)
+	if err := os.WriteFile(s.Path, append(header, data...), 0o600); err != nil {
+		return err
+	}
+
+	// 写盘用的是抽掉字段后的副本状态，内存里的 Store 还要能继续正常使用
+	// （界面「保存」后不重新读文件），所以写完再合并回来。
+	s.Defaults.applyTo(s.Connections)
+	return nil
 }

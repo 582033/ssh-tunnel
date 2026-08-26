@@ -63,6 +63,11 @@ cp -R build/ssh-tunnel.app /Applications/
 
 ```yaml
 active: "公司"                        # 当前选中的连接，须与某条 name 对应
+
+defaults:                             # 所有连接共用的默认值，可省略
+  chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  customDNS: ""
+
 connections:
   - name: "公司"                      # 下拉里显示的名字，同一文件内唯一
     username: "user"                  # 服务器用户名
@@ -71,9 +76,8 @@ connections:
     serverAddr: "example.com"         # 服务器地址
     serverPort: "22"                  # 服务器端口，留空默认 22
     localPort: "1081"                 # 本地 socks5 端口，留空默认 1081
-    customDNS: ""                     # 留空=由 SSH 服务器解析；填了则用它解析且查询走隧道，不写端口默认补 53
+    # customDNS、chromePath 不写则跟着 defaults 走
     useChrome: true                   # 是否同时启动本地 Chrome
-    chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     autoConnect: true                 # 打开 App 后自动连接这条
   - name: "家里"
     username: "user"
@@ -81,6 +85,10 @@ connections:
     serverAddr: "home.example.com"
     localPort: "1082"
 ```
+
+`defaults` 只放跟服务器身份无关、大概率所有连接都一样的字段，目前支持 `chromePath` 和 `customDNS`。某条连接自己填了同名字段就用自己的，留空才回退到 `defaults`；`defaults` 也留空则走各字段自身的默认值（如 `customDNS` 留空即服务器解析）。`serverAddr`/`username`/`password`/`privateKey`/`serverPort`/`localPort`/`autoConnect` 这类恰恰是用来区分各条连接的差异字段，不支持放进 `defaults`。
+
+`defaults` 是可选的，不写不影响现有配置；App 「保存」时也不会把合并结果拍死写进每条连接，改一次 `defaults` 会联动所有没有自行覆盖该字段的连接。
 
 password 和 privateKey 至少填一个，两个都填时会一并提交给服务器，由 SSH 协议协商用哪种。
 
