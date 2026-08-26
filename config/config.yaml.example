@@ -1,0 +1,30 @@
+# ssh-tunnel 配置示例
+# 复制到 ~/.config/ssh-tunnel/config.yaml 后修改（首次在 App 里保存也会自动生成）
+#
+# 一个文件可以放多条连接，App 顶部下拉在它们之间切换；
+# active 指向当前选中的那一条，同一时刻只有它在连接。
+
+active: "公司"
+
+connections:
+  - name: "公司"                      # 下拉里显示的名字，同一文件内唯一
+    username: "user"                  # 服务器用户名
+    password: ""                      # 服务器密码；与 privateKey 至少填一个
+    privateKey: "~/.ssh/id_rsa"       # 私钥路径，支持 ~；与 password 同时填写时优先用私钥
+    serverAddr: "example.com"         # 服务器地址
+    serverPort: "22"                  # 服务器端口，留空默认 22
+    localPort: "1081"                 # 本地 socks5 端口，留空默认 1081
+    customDNS: ""                     # 留空=由 SSH 服务器解析（推荐）；填了则用它解析且查询走隧道，不写端口默认补 53
+    useChrome: true                   # 是否同时启动本地 Chrome
+    chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    autoConnect: true                 # 打开 App 后自动连接这条
+
+  # 多条连接建议用不同的 localPort，切换时浏览器里不必改代理地址
+  - name: "家里"
+    username: "user"
+    password: "..."
+    serverAddr: "home.example.com"
+    serverPort: "22"
+    localPort: "1082"
+    useChrome: false
+    autoConnect: false
