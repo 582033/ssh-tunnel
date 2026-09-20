@@ -17,11 +17,31 @@ jobs:
           go-version: "1.22"
           cache: true
 
+      - name: 环境诊断
+        run: |
+          go version
+          go env GOOS GOARCH CGO_ENABLED
+          uname -m
+
       - name: 静态检查
-        run: go vet ./...
+        run: |
+          go vet ./... > /tmp/vet.log 2>&1
+          status=$?
+          {
+            echo "## go vet 输出"
+            cat /tmp/vet.log
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: 运行测试
-        run: go test ./...
+        run: |
+          go test ./... > /tmp/test.log 2>&1
+          status=$?
+          {
+            echo "## go test 输出"
+            cat /tmp/test.log
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
   build:
     name: 构建 .app
