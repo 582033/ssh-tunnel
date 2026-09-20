@@ -27,20 +27,18 @@ jobs:
         run: |
           go vet ./... > /tmp/vet.log 2>&1
           status=$?
-          {
-            echo "## go vet 输出"
-            cat /tmp/vet.log
-          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            echo "::error::vet | $line"
+          done < /tmp/vet.log
           exit $status
 
       - name: 运行测试
         run: |
           go test ./... > /tmp/test.log 2>&1
           status=$?
-          {
-            echo "## go test 输出"
-            cat /tmp/test.log
-          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            echo "::error::test | $line"
+          done < /tmp/test.log
           exit $status
 
   build:
