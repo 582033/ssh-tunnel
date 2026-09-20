@@ -78,17 +78,42 @@ func (d *Defaults) stripFrom(connections []*Config) {
 	}
 }
 
+// legacyConfigPath 是迁移前的默认路径（~/.config/ssh-tunnel/config.yaml）。
+// 只在 DefaultPaths 里保留为回退项，且被 migrateLegacyConfig 用作搬迁源。
+func legacyConfigPath() (string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, ".config", "ssh-tunnel", "config.yaml"), true
+}
+
+// appSupportConfigPath 是 macOS 上的推荐路径，符合系统「每个 App 一个
+// Application Support 子目录」的约定，且不会被系统当作要同步/清理的缓存。
+func appSupportConfigPath() (string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, "Library", "Application Support", "ssh-tunnel", "config.yaml"), true
+}
+
 // DefaultPaths 返回按优先级排列的配置搜索路径。
 // .app 内的进程工作目录是 /，不能依赖相对路径，因此把用户目录和
 // bundle 内的 Resources 目录都纳入搜索范围。
 func DefaultPaths() []string {
 	var paths []string
 
+	if p, ok := appSupportConfigPath(); ok {
+		paths = append(paths, p)
+	}
+	if p, ok := legacyConfigPath(); ok {
+		// 旧默认路径降级为回退项，供 migrateLegacyConfig 搬迁前
+		// 或搬迁失败时仍能被读到，不影响已有用户。
+		paths = append(paths, p)
+	}
 	if home, err := os.UserHomeDir(); err == nil {
-		paths = append(paths,
-			filepath.Join(home, ".config", "ssh-tunnel", "config.yaml"),
-			filepath.Join(home, ".ssh-tunnel.yaml"),
-		)
+		paths = append(paths, filepath.Join(home, ".ssh-tunnel.yaml"))
 	}
 
 	// 可执行文件同级 / bundle 内的 Resources
@@ -105,6 +130,38 @@ func DefaultPaths() []string {
 	}
 
 	return append(paths, "./config/config.yaml")
+}
+
+// migrateLegacyConfig 把旧路径的配置文件复制到新的 Application Support
+// 路径。只在新路径尚不存在、旧路径确实存在时执行，且不删除旧文件——
+// 保留一份原地备份，避免任何数据丢失风险。
+//
+// 返回是否发生了搬迁；err 非 nil 时调用方应继续用旧路径，不阻塞启动。
+func migrateLegacyConfig() (migrated bool, err error) {
+	newPath, ok := appSupportConfigPath()
+	if !ok {
+		return false, nil
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return false, nil // 新路径已存在，不覆盖
+	}
+
+	oldPath, ok := legacyConfigPath()
+	if !ok {
+		return false, nil
+	}
+	data, err := os.ReadFile(oldPath)
+	if err != nil {
+		return false, nil // 旧文件不存在或不可读，无需搬迁
+	}
+
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o700); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(newPath, data, 0o600); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // Load 读取配置并校验当前选中的连接。
@@ -149,6 +206,11 @@ func NewStore() *Store {
 
 func read(path string) (*Store, error) {
 	if path == "" {
+		// 用户没有显式指定路径才需要考虑旧路径搬迁：把 ~/.config/ssh-tunnel/
+		// 下的旧配置复制到新的 Application Support 路径，旧文件保留不删，
+		// 出错也不阻塞——继续按 DefaultPaths 顺序查找即可。
+		migrateLegacyConfig()
+
 		for _, p := range DefaultPaths() {
 			if _, err := os.Stat(p); err == nil {
 				path = p

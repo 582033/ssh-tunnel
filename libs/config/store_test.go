@@ -314,6 +314,116 @@ connections:
 }
 
 // 没写 name 的连接要自动取一个可读的名字，不能在下拉里显示成空白
+// DefaultPaths 第一项必须是 Application Support 路径——这是新的
+// 推荐默认位置，旧的 ~/.config/ssh-tunnel 降级为回退项。
+func TestDefaultPathsPrefersAppSupport(t *testing.T) {
+	paths := DefaultPaths()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("无法获取 HOME")
+	}
+	want := filepath.Join(home, "Library", "Application Support", "ssh-tunnel", "config.yaml")
+	if len(paths) == 0 || paths[0] != want {
+		t.Fatalf("第一个默认路径应为 %q，实际 %v", want, paths)
+	}
+
+	legacy := filepath.Join(home, ".config", "ssh-tunnel", "config.yaml")
+	found := false
+	for _, p := range paths {
+		if p == legacy {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("旧路径 %q 应仍保留在回退列表中: %v", legacy, paths)
+	}
+}
+
+// 旧路径有文件、新路径没有时，应该自动搬迁一份过去，且不删除旧文件。
+func TestMigrateLegacyConfigCopiesWithoutDeleting(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	oldPath := filepath.Join(home, ".config", "ssh-tunnel", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("connections:\n  - name: 公司\n    username: u\n    password: p\n    serverAddr: h.example\n")
+	if err := os.WriteFile(oldPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated, err := migrateLegacyConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !migrated {
+		t.Fatal("应发生搬迁")
+	}
+
+	newPath := filepath.Join(home, "Library", "Application Support", "ssh-tunnel", "config.yaml")
+	got, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("新路径应有文件: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("搬迁内容不一致: %q", got)
+	}
+
+	if _, err := os.Stat(oldPath); err != nil {
+		t.Fatal("旧文件不应被删除")
+	}
+}
+
+// 新路径已经有文件时不能覆盖，避免用户在新路径上的修改被旧文件冲掉。
+func TestMigrateLegacyConfigSkipsWhenNewPathExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	oldPath := filepath.Join(home, ".config", "ssh-tunnel", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldPath, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	newPath := filepath.Join(home, "Library", "Application Support", "ssh-tunnel", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newPath, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated, err := migrateLegacyConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated {
+		t.Fatal("新路径已存在时不应搬迁")
+	}
+	got, _ := os.ReadFile(newPath)
+	if string(got) != "new" {
+		t.Fatalf("新路径内容被覆盖了: %q", got)
+	}
+}
+
+// 旧路径没有文件时，搬迁应是无操作，不能报错。
+func TestMigrateLegacyConfigNoopWhenOldMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	migrated, err := migrateLegacyConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated {
+		t.Fatal("旧文件不存在时不应报告搬迁")
+	}
+}
+
 func TestUnnamedConnectionGetsLabel(t *testing.T) {
 	s, err := Load(writeTemp(t, `
 connections:

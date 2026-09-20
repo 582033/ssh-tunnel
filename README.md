@@ -53,11 +53,14 @@ cp -R build/ssh-tunnel.app /Applications/
 
 配置文件按以下顺序查找第一个存在的：
 
-1. `~/.config/ssh-tunnel/config.yaml`
-2. `~/.ssh-tunnel.yaml`
-3. 可执行文件同级的 `config.yaml` / `config/config.yaml`
-4. `.app` 内的 `Contents/Resources/config.yaml`
-5. `./config/config.yaml`
+1. `~/Library/Application Support/ssh-tunnel/config.yaml`（推荐，符合 macOS 惯例）
+2. `~/.config/ssh-tunnel/config.yaml`（旧默认路径，仍会被读取）
+3. `~/.ssh-tunnel.yaml`
+4. 可执行文件同级的 `config.yaml` / `config/config.yaml`
+5. `.app` 内的 `Contents/Resources/config.yaml`
+6. `./config/config.yaml`
+
+首次运行（且未用 `-config` 显式指定路径）时，若第 1 项还没有文件、第 2 项的旧配置存在，会自动把旧配置复制一份到新路径，旧文件原样保留、不会被删除；此后两处路径都可用，但 App 只认第 1 项。新路径下已经有文件时不会被覆盖。
 
 也可用 `-config <路径>` 显式指定。一般不需要手写，用 App 的「设置」页即可；下面是文件格式，方便在服务器上跑 CLI 模式时手工准备。
 
