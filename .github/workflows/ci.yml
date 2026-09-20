@@ -24,7 +24,7 @@ jobs:
       - name: 运行测试
         run: |
           set +e
-          go test -count=1 -v ./... > /tmp/test.log 2>&1
+          go test -count=1 -p 1 -v ./... > /tmp/test.log 2>&1
           status=$?
           set -e
           echo "== exit=$status 日志字节数: $(wc -c < /tmp/test.log)"
