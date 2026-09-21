@@ -8,6 +8,11 @@ APP_NAME="ssh-tunnel"
 APP="build/${APP_NAME}.app"
 VERSION="${VERSION:-1.0.0}"
 
+# 构建机（如 macOS 26 的 CI runner）会按自身 SDK 把二进制最低系统
+# 版本打成 26.0，导致在旧系统上无法启动。这里固定为与 Info.plist
+# 一致的 11.0，让 CGO 链接带上 -mmacosx-version-min。
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+
 rm -rf build
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 
