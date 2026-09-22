@@ -13,37 +13,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
         with:
-          # macOS 26 runner 的 dyld 强制要求二进制含 LC_UUID，
-          # Go >=1.23 的链接器才会生成，1.22 的测试二进制会被直接杀掉。
-          go-version: "1.23"
-          cache: true
+          # macos-latest 是 arm64，universal 需要补 x86_64 目标交叉编译
+          targets: x86_64-apple-darwin
 
-      - name: 静态检查
-        run: go vet ./...
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
-      - name: 运行测试
-        run: go test -count=1 ./...
+      - name: 单元测试
+        working-directory: src-tauri
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: cargo test --locked
 
   build:
-    name: 构建 .app
+    name: 构建 .app / .dmg
     needs: test
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: "1.23"
-          cache: true
+          targets: x86_64-apple-darwin
 
-      - name: 构建
-        run: ./build.sh
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: 构建通用二进制并打包
+        working-directory: src-tauri
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: cargo tauri build --target universal-apple-darwin
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: ssh-tunnel-app
-          path: build/
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error

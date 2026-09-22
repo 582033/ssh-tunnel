@@ -3,3 +3,5 @@ build/
 config/config.yaml
 .claude
 .DS_Store
+src-tauri/target/
+src-tauri/gen/schemas/
