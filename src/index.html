@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSH 隧道</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="app-bar">
+      <div class="brand">
+        <span class="brand-mark">⇄</span>
+        <span>SSH 隧道</span>
+      </div>
+      <div id="pill" class="pill stopped">
+        <span id="dot" class="dot stopped"></span>
+        <span id="statusText">已停止</span>
+      </div>
+    </header>
+
+    <div class="conn-bar">
+      <select id="picker" title="选择连接"></select>
+      <button id="btnAdd" class="btn btn-icon" title="新建连接">＋</button>
+      <button id="btnDel" class="btn btn-icon" title="删除当前连接">−</button>
+    </div>
+    <div id="proxyText" class="conn-sub">代理未启动</div>
+    <div id="notice" class="notice hidden"></div>
+
+    <nav id="tabbar" class="nav-tabs">
+      <button class="tab active" data-tab="status">状态</button>
+      <button class="tab" data-tab="settings">设置</button>
+      <button class="tab" data-tab="log">日志</button>
+    </nav>
+
+    <main id="tabs">
+      <!-- 状态页 -->
+      <div id="panel-status" class="panel active">
+        <div class="panel-card">
+          <div class="panel-heading">当前连接</div>
+          <div class="panel-body">
+            <div id="infoGrid" class="info-grid"></div>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-heading">配置文件</div>
+          <div class="panel-body">
+            <div id="confPath" class="value wrap">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 设置页 -->
+      <div id="panel-settings" class="panel">
+        <form id="settingsForm" autocomplete="off">
+          <div class="panel-card">
+            <div class="panel-heading">服务器</div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label for="f-name">连接名称</label>
+                <input type="text" id="f-name" />
+              </div>
+              <div class="row">
+                <div class="form-group col-grow">
+                  <label for="f-serverAddr">地址</label>
+                  <input type="text" id="f-serverAddr" placeholder="example.com" />
+                </div>
+                <div class="form-group col-port">
+                  <label for="f-serverPort">端口</label>
+                  <input type="text" id="f-serverPort" inputmode="numeric" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="f-username">用户名</label>
+                <input type="text" id="f-username" />
+              </div>
+              <div class="form-group">
+                <label for="f-password">密码</label>
+                <input type="password" id="f-password" />
+              </div>
+              <div class="form-group">
+                <label for="f-privateKey">私钥文件路径</label>
+                <input type="text" id="f-privateKey" placeholder="~/.ssh/id_ed25519" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-heading">代理与浏览器</div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label for="f-localPort">本地代理端口</label>
+                <input type="text" id="f-localPort" inputmode="numeric" />
+              </div>
+              <div class="form-group">
+                <label>域名解析方式</label>
+                <div class="radio-row" id="f-dnsMode">
+                  <label class="radio"><input type="radio" name="dnsMode" value="remote" checked /> 由 SSH 服务器解析（推荐）</label>
+                  <label class="radio"><input type="radio" name="dnsMode" value="custom" /> 指定 DNS，经隧道查询</label>
+                </div>
+              </div>
+              <div class="form-group" id="f-customDNS-wrap">
+                <label for="f-customDNS">自定义 DNS</label>
+                <input type="text" id="f-customDNS" placeholder="8.8.8.8" />
+              </div>
+              <div class="form-group">
+                <label for="f-chromePath">Chrome 路径</label>
+                <input type="text" id="f-chromePath" />
+              </div>
+              <label class="check"><input type="checkbox" id="f-useChrome" /> 连接后自动打开无痕 Chrome</label>
+              <label class="check"><input type="checkbox" id="f-autoConn" /> 启动时自动连接</label>
+            </div>
+          </div>
+        </form>
+        <div class="btn-row">
+          <button id="btnRevert" class="btn">放弃修改</button>
+          <span class="spacer"></span>
+          <button id="btnSave" class="btn">保存</button>
+          <button id="btnSaveConnect" class="btn primary">保存并连接</button>
+        </div>
+      </div>
+
+      <!-- 日志页 -->
+      <div id="panel-log" class="panel">
+        <div class="log-toolbar">
+          <span class="hint">保留最近 1000 条</span>
+          <div class="btn-group">
+            <button id="btnCopyLog" class="btn btn-sm">复制</button>
+            <button id="btnClearLog" class="btn btn-sm">清空</button>
+          </div>
+        </div>
+        <pre id="logEntry"></pre>
+      </div>
+    </main>
+
+    <footer id="actions">
+      <button id="btnToggle" class="btn primary grow">连接</button>
+      <button id="btnChrome" class="btn grow" disabled>Chrome</button>
+      <button id="btnCopy" class="btn grow" disabled>复制地址</button>
+    </footer>
+    <!-- 应用内弹窗：Tauri 的 webview 不支持 prompt/confirm/alert -->
+    <div id="modal" class="modal-mask hidden">
+      <div class="modal">
+        <div class="modal-heading" id="modalTitle"></div>
+        <div class="modal-body">
+          <div id="modalText" class="modal-text"></div>
+          <input type="text" id="modalInput" class="hidden" />
+        </div>
+        <div class="modal-foot">
+          <button id="modalCancel" class="btn">取消</button>
+          <button id="modalOk" class="btn primary">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

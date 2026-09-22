@@ -1,0 +1,303 @@
+/* 简约但不简陋：Bootstrap 3 那套克制的排版——4px 圆角、1px 描边、
+   浅灰面板头、主色 #337ab7，信息靠分组和留白区分层级。 */
+:root {
+  color-scheme: light dark;
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --heading: #f7f8fa;
+  --border: #d6dae0;
+  --border-strong: #c3c8cf;
+  --text: #2b3035;
+  --sub: #7a8089;
+  --brand: #337ab7;
+  --brand-dark: #2a6496;
+  --ok: #4c9d6a;
+  --warn: #dd8f1c;
+  --danger: #cf4a44;
+  --focus: rgba(102, 175, 233, 0.35);
+  --shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  --pill-ok-bg: #eaf6ee;
+  --pill-warn-bg: #fdf3e2;
+  --pill-danger-bg: #fbeceb;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1e22;
+    --surface: #252830;
+    --heading: #2c3039;
+    --border: #383d46;
+    --border-strong: #464c57;
+    --text: #e8eaed;
+    --sub: #9aa1ab;
+    --brand: #4a90d9;
+    --brand-dark: #3a7cb8;
+    --ok: #55ab77;
+    --warn: #d99a35;
+    --danger: #cf5b55;
+    --shadow: none;
+    --pill-ok-bg: rgba(76, 157, 106, 0.16);
+    --pill-warn-bg: rgba(221, 143, 28, 0.16);
+    --pill-danger-bg: rgba(207, 74, 68, 0.16);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- 顶栏 ---------- */
+.app-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; letter-spacing: .2px;
+}
+.brand-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  background: var(--brand); color: #fff; font-size: 12px;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--sub);
+  font-size: 12px;
+}
+.pill.connected { border-color: rgba(76, 157, 106, .45); background: var(--pill-ok-bg); color: var(--ok); }
+.pill.connecting, .pill.reconnecting { border-color: rgba(221, 143, 28, .45); background: var(--pill-warn-bg); color: var(--warn); }
+.pill.failed { border-color: rgba(207, 74, 68, .45); background: var(--pill-danger-bg); color: var(--danger); }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #9aa1ab; flex: none; }
+.dot.connected { background: var(--ok); }
+.dot.connecting, .dot.reconnecting { background: var(--warn); }
+.dot.failed { background: var(--danger); }
+
+/* ---------- 连接选择 ---------- */
+.conn-bar { display: flex; align-items: center; gap: 6px; padding: 9px 10px 5px; }
+.conn-sub {
+  padding: 0 10px 6px;
+  font-size: 11.5px; color: var(--sub);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- 标签页 ---------- */
+.nav-tabs {
+  display: flex; gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: 1px solid transparent; border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: none; color: var(--sub);
+  padding: 5px 13px; margin-bottom: -1px;
+  font-size: 13px; cursor: pointer;
+}
+.tab:hover { color: var(--brand); }
+.tab.active {
+  background: var(--surface);
+  border-color: var(--border);
+  border-bottom-color: var(--surface);
+  color: var(--text); font-weight: 600;
+}
+
+#tabs { flex: 1; min-height: 0; display: flex; }
+.panel { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
+.panel.active { display: block; }
+
+/* ---------- 面板卡 ---------- */
+.panel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.panel-heading {
+  padding: 5px 10px;
+  background: var(--heading);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 600; color: var(--sub);
+  letter-spacing: .3px;
+}
+.panel-body { padding: 10px; }
+
+.info-grid {
+  display: grid; grid-template-columns: 76px 1fr;
+  row-gap: 7px; column-gap: 10px; align-items: baseline;
+}
+.info-grid .key { color: var(--sub); font-size: 12px; }
+.info-grid .value { font-size: 13px; }
+.value.wrap { word-break: break-all; }
+
+/* ---------- 表单 ---------- */
+.form-group { margin-bottom: 9px; }
+.form-group:last-child { margin-bottom: 0; }
+.row { display: flex; gap: 8px; }
+.col-grow { flex: 1; min-width: 0; }
+.col-port { width: 76px; flex: none; }
+
+label {
+  display: block; margin-bottom: 3px;
+  font-size: 11.5px; color: var(--sub);
+}
+
+input[type="text"], input[type="password"], select {
+  width: 100%; padding: 5px 8px;
+  font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface); color: var(--text);
+  transition: border-color .12s, box-shadow .12s;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: #66afe9;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+@media (prefers-color-scheme: dark) {
+  input[type="text"], input[type="password"], select { background: var(--bg); }
+}
+
+.radio-row { display: flex; flex-direction: column; gap: 5px; padding-top: 1px; }
+.radio, .check {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text); margin: 0;
+}
+.radio input, .check input { margin: 0; }
+.check { margin-top: 8px; }
+
+.hint { font-size: 11.5px; color: var(--sub); }
+
+/* ---------- 提示条 ---------- */
+.notice {
+  margin: 0 10px 8px; padding: 6px 9px;
+  border: 1px solid rgba(207, 74, 68, .4);
+  border-radius: 4px;
+  background: var(--pill-danger-bg); color: var(--danger);
+  font-size: 12px; line-height: 1.45;
+}
+
+/* ---------- 弹窗 ---------- */
+.modal-mask {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 64px;
+  background: rgba(0, 0, 0, .25);
+}
+.modal {
+  width: 290px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+  overflow: hidden;
+}
+.modal-heading {
+  padding: 6px 10px;
+  background: var(--heading);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600;
+}
+.modal-body { padding: 10px; }
+.modal-text { font-size: 12.5px; line-height: 1.5; margin-bottom: 8px; }
+.modal-text:empty { margin-bottom: 0; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 6px;
+  padding: 8px 10px;
+  background: var(--heading);
+  border-top: 1px solid var(--border);
+}
+
+.hidden { display: none !important; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 11px;
+  font-size: 13px; font-family: inherit; line-height: 1.5;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface); color: var(--text);
+  cursor: pointer; white-space: nowrap;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.btn:active:not(:disabled) { background: var(--bg); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus { outline: none; box-shadow: 0 0 0 3px var(--focus); }
+
+.btn.primary {
+  background: var(--brand); border-color: var(--brand-dark);
+  color: #fff; font-weight: 600;
+}
+.btn.primary:hover:not(:disabled) { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.btn.primary:active:not(:disabled) { background: var(--brand-dark); }
+
+/* 「断开」用的是 accent：Bootstrap 里的 btn-danger */
+.btn.accent {
+  background: var(--danger); border-color: var(--danger);
+  color: #fff; font-weight: 600;
+}
+.btn.accent:hover:not(:disabled) { filter: brightness(.94); color: #fff; }
+
+/* 破坏性操作（删除连接等） */
+.btn.danger {
+  background: var(--danger); border-color: var(--danger);
+  color: #fff; font-weight: 600;
+}
+.btn.danger:hover:not(:disabled) { filter: brightness(.94); color: #fff; }
+
+.btn-icon { width: 28px; padding: 0; font-size: 14px; flex: none; }
+.btn-sm { padding: 3px 8px; font-size: 12px; }
+.btn-group { display: flex; gap: 6px; }
+.grow { flex: 1; }
+.spacer { flex: 1; }
+
+.btn-row { display: flex; align-items: center; gap: 6px; padding: 0 0 2px; }
+
+/* ---------- 日志 ---------- */
+#panel-log.active { display: flex; flex-direction: column; }
+.log-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 7px;
+}
+#logEntry {
+  flex: 1; min-height: 0; overflow: auto;
+  margin: 0; padding: 9px 10px;
+  font-family: "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  -webkit-user-select: text; user-select: text;
+}
+
+/* ---------- 底栏 ---------- */
+#actions {
+  display: flex; gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+#actions .btn { padding-top: 6px; padding-bottom: 6px; }
