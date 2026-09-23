@@ -12,7 +12,7 @@
       {
         "title": "SSH Tunnel",
         "width": 470,
-        "height": 610,
+        "height": 624,
         "minWidth": 420,
         "minHeight": 460,
         "resizable": true,
