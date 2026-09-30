@@ -113,7 +113,7 @@ impl Config {
 
     /// 本地 socks5 代理地址
     pub fn proxy_addr(&self) -> String {
-        format!("socks5://127.0.0.1:{}", self.local_port)
+        format!("socks5://localhost:{}", self.local_port)
     }
 
     /// 展示用名称，未命名时退回「用户名@地址」

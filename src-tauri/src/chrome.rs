@@ -24,93 +24,22 @@ impl Chrome {
         if !std::path::Path::new(path).exists() {
             return Err(format!("Chrome 不存在: {}", path));
         }
-        // macOS 上不能直接 fork/exec 一个 GUI 应用：子进程拿不到 WindowServer
-        // 会话，窗口打不开、甚至被系统回收。必须经由 LaunchServices（open）启动，
-        // 这样既能在正确的 GUI 会话里拉起，也会自动置前激活。
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(bundle) = app_bundle_for(path) {
-                return start_via_open(path, &bundle, args, user_data_dir, log);
-            }
-        }
-        start_direct(path, args, user_data_dir, log)
-    }
-}
+        let mut cmd = Command::new(path);
+        cmd.args(args);
+        cmd.process_group(0);
+        cmd.stdin(Stdio::null());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
 
-/// 经由 open -a 拉起 .app（macOS）。open 本身会很快退出，真正的 Chrome 进程
-/// 由 close() 通过 --user-data-dir 认出并关闭。
-#[cfg(target_os = "macos")]
-fn start_via_open(
-    binary: &str,
-    bundle: &str,
-    args: &[String],
-    user_data_dir: String,
-    log: Box<dyn Fn(&str) + Send + Sync>,
-) -> Result<Arc<Chrome>, String> {
-    let mut cmd = Command::new("open");
-    cmd.arg("-n").arg("-a").arg(bundle);
-    cmd.arg("--args");
-    cmd.args(args);
-    cmd.stdin(Stdio::null());
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
-
-    match cmd.spawn() {
-        Ok(child) => Ok(Arc::new(Chrome {
+        let child = cmd.spawn().map_err(|e| format!("启动 Chrome 失败: {}", e))?;
+        Ok(Arc::new(Chrome {
             child: Mutex::new(Some(child)),
             user_data_dir,
             stopping: AtomicBool::new(false),
             log,
-        })),
-        Err(e) => {
-            // open 不可用（极少见）时退回直接拉起，至少能保活
-            log(&format!("通过 open 启动 Chrome 失败: {}（将尝试直接启动）", e));
-            start_direct(binary, args, user_data_dir, log)
-        }
+        }))
     }
-}
 
-/// 直接 fork/exec（Linux/Windows，或非 .app 的 Chrome 二进制）。
-fn start_direct(
-    path: &str,
-    args: &[String],
-    user_data_dir: String,
-    log: Box<dyn Fn(&str) + Send + Sync>,
-) -> Result<Arc<Chrome>, String> {
-    let mut cmd = Command::new(path);
-    cmd.args(args);
-    cmd.process_group(0);
-    cmd.stdin(Stdio::null());
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
-
-    let child = cmd.spawn().map_err(|e| format!("启动 Chrome 失败: {}", e))?;
-    Ok(Arc::new(Chrome {
-        child: Mutex::new(Some(child)),
-        user_data_dir,
-        stopping: AtomicBool::new(false),
-        log,
-    }))
-}
-
-/// 从 Chrome 二进制路径反推出 .app 包路径，例如
-/// /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-/// → /Applications/Google Chrome.app
-#[cfg(target_os = "macos")]
-fn app_bundle_for(path: &str) -> Option<String> {
-    let mut p = std::path::Path::new(path);
-    loop {
-        if p.extension().map(|e| e == "app").unwrap_or(false) {
-            return Some(p.display().to_string());
-        }
-        match p.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => p = parent,
-            _ => return None,
-        }
-    }
-}
-
-impl Chrome {
     pub fn logf(&self, s: &str) {
         (self.log)(s);
     }

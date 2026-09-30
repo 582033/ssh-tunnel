@@ -242,11 +242,13 @@ fn chrome_user_data_dir() -> String {
     format!("{}/ssh-tunnel-chrome", std::env::temp_dir().display())
 }
 
-/// 无痕 Chrome 启动参数（与 Go 版一致）。
+/// 无痕 Chrome 启动参数（与 Go 版一致；关键是 --single-process，
+/// 否则 Chrome 的多进程/zygote 模型在 app 进程上下文里拉不起来）。
 fn browser_args(cfg: &Config) -> Vec<String> {
     vec![
         "--incognito".to_string(),
         "--dns-prefetch-disable".to_string(),
+        "--single-process".to_string(),
         format!("--proxy-server={}", cfg.proxy_addr()),
         format!("--user-data-dir={}", chrome_user_data_dir()),
     ]
